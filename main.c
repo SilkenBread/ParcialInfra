@@ -1,6 +1,8 @@
+#include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 
 // Funciones placeholder para la carga y guardado de imágenes
 void cargarImagen(int *imagen, int width, int height);
@@ -82,14 +84,39 @@ void guardarImagen(int *imagen, int width, int height) {
 
 
 void aplicarFiltro(int *imagen, int *imagenProcesada, int width, int height) {
-    // Código que aplica un filtro a cada píxel (paralelizable)
-    for (int i = 0; i < width * height; i++) {
-        imagenProcesada[i] = imagen[i] / 2;  // Ejemplo de operación de filtro
+    int Gx[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
+    int Gy[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
+
+    // printf("Número de hilos: %d\n", omp_get_max_threads());
+
+    //Parelización con OpenMP usando collapse para paralelizar dos bucles anidados con un máximo de 2*omp_get_max_threads() hilos
+    #pragma omp parallel for collapse(2) num_threads(omp_get_max_threads())
+    for (int y = 1; y < height - 1; y++) {
+        for (int x = 1; x < width - 1; x++) {
+            int sumX = 0;
+            int sumY = 0;
+
+            // Aplicar máscaras de Sobel (Gx y Gy)
+            for (int ky = -1; ky <= 1; ky++) {
+                for (int kx = -1; kx <= 1; kx++) {
+                    sumX += imagen[(y + ky) * width + (x + kx)] * Gx[ky + 1][kx + 1];
+                    sumY += imagen[(y + ky) * width + (x + kx)] * Gy[ky + 1][kx + 1];
+                }
+            }
+
+            // Calcular magnitud del gradiente
+            int magnitude = abs(sumX) + abs(sumY);
+            imagenProcesada[y * width + x] = (magnitude > 255) ? 255 : magnitude;  // Normalizar a 8 bits
+        }
     }
 }
 
+
 int calcularSumaPixeles(int *imagen, int width, int height) {
     int suma = 0;
+
+    //Parelización con OpenMP usando reduction para sumar los valores de los píxeles de la imagen
+    #pragma omp parallel for reduction(+:suma) num_threads(omp_get_max_threads()*2)
     for (int i = 0; i < width * height; i++) {
         suma += imagen[i];
     }
